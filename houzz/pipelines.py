@@ -53,7 +53,8 @@ class HouzzPipeline(object):
         self.client.close()
 
     def process_item(self, item, spider: ProfilesSpider):
-        self.profile_collection.insert_one(dict(item))
+        self.profile_collection.update({'contact_name': item['contact_name'],
+                                        'phone_number': item['phone_number']}, dict(item), True)
         spider.stats.set_value('profiles_added', spider.stats.get_value('profiles_added', 0) + 1)
         spider.logger.info(f'Profile item "{item["contact_name"]}" processed')
         return item
