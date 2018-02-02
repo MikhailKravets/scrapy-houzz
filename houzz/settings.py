@@ -19,13 +19,13 @@ MONGO_URI = 'mongodb://localhost:27017/'
 MONGO_DB = 'houzz'
 
 # Amount of profiles to extract
-MAX_COUNT = 50
+MAX_COUNT = 5000
 
 # Identify the preferable country when searching the location by postal
 GEO_BIAS = 'JP'
 
 # Proxy address set to some value, i.e. 'http://username:password@some_proxy_server:ports'
-PROXY_ADDR = None
+PROXY_ADDR = '122.183.139.109:8080'  # That is an Indian proxy
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = 'houzz (+http://www.yourdomain.com)'
