@@ -22,7 +22,7 @@ MONGO_DB = 'houzz'
 MAX_COUNT = 5000
 
 # Identify the preferable country when searching the location by postal
-GEO_BIAS = 'JP'
+GEO_BIAS = None
 
 # Proxy address set to some value, i.e. 'http://username:password@some_proxy_server:ports'
 PROXY_ADDR = None  # That is an Indian proxy '122.183.139.109:8080'

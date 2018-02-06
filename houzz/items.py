@@ -4,7 +4,7 @@
 #
 # See documentation in:
 # https://doc.scrapy.org/en/latest/topics/items.html
-
+import phonenumbers
 import scrapy
 from scrapy.loader import ItemLoader
 from scrapy.loader.processors import TakeFirst, MapCompose, Join
@@ -27,6 +27,18 @@ def inline(text):
     :return:
     """
     return text.replace('\t', ' ').replace('\n', '. ')
+
+
+def format_phone(phone: str, country_code: str) -> str:
+    """
+    Format given phone number in E164
+
+    :param phone: unformatted phone number
+    :param country_code: country code of phone number
+    :return: formatted phone number
+    """
+    locale = phonenumbers.parse(phone, country_code.upper())
+    return phonenumbers.format_number(locale, phonenumbers.PhoneNumberFormat.E164)
 
 
 class ProfileLoader(ItemLoader):

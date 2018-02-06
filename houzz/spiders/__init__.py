@@ -12,11 +12,38 @@ from geopy.exc import GeocoderTimedOut
 from scrapy.loader import ItemLoader
 from scrapy.statscollectors import MemoryStatsCollector
 
-from houzz.items import Profile, Address, ProfileLoader
+from houzz.items import Profile, Address, ProfileLoader, format_phone
 from houzz.settings import PROXY_ADDR
 
 
-class ProfilesSpider(scrapy.Spider):
+class GeoLocator:
+    def __init__(self):
+        self.geo_coder = None
+        self.timeout = 5
+
+    def geolocate(self, query: str, default_code: str= 'JP'):
+        """
+        Processor to transform postal into coordinates on the Globe.
+
+        *NOTE*: Be careful because the function is depending on chosen geo driver very much.
+        Now it is set for use with Open Streets Map ``Nominatim`` driver
+
+        :param query: postal code
+        :param default_code: default country code to use
+        :return: geo longitude, geo.latitude, country_code
+        """
+        if not self.geo_coder:
+            self.geo_coder = Nominatim(country_bias=default_code)
+        try:
+            geo = self.geo_coder.geocode(query, addressdetails=True, timeout=self.timeout)
+        except GeocoderTimedOut as error:
+            return None, default_code
+        if not geo:
+            return None, default_code
+        return (geo.longitude, geo.latitude), geo.raw['address']['country_code']
+
+
+class ProfilesSpider(scrapy.Spider, GeoLocator):
     name = 'profiles'
     start_urls = [
         'https://www.houzz.jp/professionals'
@@ -24,6 +51,7 @@ class ProfilesSpider(scrapy.Spider):
 
     def __init__(self, stats: MemoryStatsCollector, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
+        GeoLocator.__init__(self)
         self.extracted = 0
         self.stats = stats
         self.geo_coder = None  # realized lazy connection to geo coder
@@ -69,7 +97,7 @@ class ProfilesSpider(scrapy.Spider):
         l.add_css('activity_area', ".pro-info-horizontal-list .info-list-text [itemprop=child] [itemprop=title]::text")
 
         unformatted_phone = response.css(".pro-contact-methods .pro-contact-text::text").extract_first()
-        l.add_value('phone_number', self.format_phone(unformatted_phone, country_code))
+        l.add_value('phone_number', format_phone(unformatted_phone, country_code))
 
         l.add_css('website', ".pro-contact-methods .proWebsiteLink::attr(href)")
 
@@ -109,48 +137,14 @@ class ProfilesSpider(scrapy.Spider):
             pass
         yield profile_loader.load_item()
 
-    def geolocate(self, postal: str, default_code: str='JP'):
-        """
-        Processor to transform postal into coordinates on the Globe.
 
-        *NOTE*: Be careful because the function is depending on chosen geo driver very much.
-        Now it is set for use with Open Streets Map ``Nominatim`` driver
-
-        :param postal: postal code
-        :param default_code: default country code to use
-        :return: geo longitude, geo.latitude, country_code
-        """
-        if not self.geo_coder:
-            self.geo_coder = Nominatim(country_bias=self.settings.get('GEO_BIAS'))
-        try:
-            geo = self.geo_coder.geocode(postal, addressdetails=True)
-        except GeocoderTimedOut as error:
-            self.logger.error("Geocoder timed out, couldn't identify location")
-            return None, default_code
-        if not geo:
-            return None, default_code
-        return (geo.longitude, geo.latitude), geo.raw['address']['country_code']
-
-    def format_phone(self, phone: str, country_code: str) -> str:
-        """
-        Format given phone number in E164
-
-        :param phone: unformatted phone number
-        :param country_code: country code of phone number
-        :return: formatted phone number
-        """
-        locale = phonenumbers.parse(phone, country_code.upper())
-        return phonenumbers.format_number(locale, phonenumbers.PhoneNumberFormat.E164)
-
-
-class APISpider(scrapy.Spider):
+class APISpider(scrapy.Spider, GeoLocator):
     name = 'api'
     url = 'https://api.houzz.com/api?'
 
     headers = {
         'X-HOUZZ-API-SITE-ID': 106,
         'X-HOUZZ-API-LOCALE': 'en_EN',
-        # 'X-HOUZZ-API-VISITOR-TOKEN': '',
         'X-HOUZZ-API-APP-AGENT': 'Lenovo S660~4.4.2',
         'X-HOUZZ-API-APP-NAME': 'android1',
         'User-Agent': 'Dalvik/1.6.0 (Linux; U; Android 4.4.2; Lenovo S660 Build/KOT49H)',
@@ -160,11 +154,12 @@ class APISpider(scrapy.Spider):
 
     def __init__(self, stats: MemoryStatsCollector, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
+        GeoLocator.__init__(self)
         self.extracted = 0
         self.stats = stats
         self.geo_coder = None  # realized lazy connection to geo coder
-        self.last_prof = 0
-        self.number_of_items = 1
+        self.last_item = 0
+        self.number_of_items = 10
 
     def start_requests(self):
         body = {
@@ -172,8 +167,8 @@ class APISpider(scrapy.Spider):
             'method': 'getProfessionals',
             'format': 'json',
             'dateFormat': 'sec',
-            'start': 0,
-            'numberOfItems': 40,
+            'start': self.last_item,
+            'numberOfItems': self.number_of_items,
             'includeSponsored': 'yes'
         }
         url = self.url + urlencode(body)
@@ -186,5 +181,42 @@ class APISpider(scrapy.Spider):
         return spider
 
     def parse(self, response: scrapy.http.TextResponse):
-        data = json.loads(response.body)
-        print(data)
+        data = json.loads(response.body_as_unicode())
+        if data['Ack'] != 'Success':
+            return  # something wrong should exit
+        for prof in data['Professionals']:
+            prof_info = prof['Professional']
+
+            l = ProfileLoader(item=Profile(), response=response)
+            l.add_value('contact_name', prof['UserName'])
+            l.add_value('activity_area', prof_info['ServicesProvided'])
+            l.add_value('website', prof_info['WebSite'])
+            l.add_value('email', prof['Email'])
+
+            al = ItemLoader(item=Address(), response=response)
+            al.add_value('postal', prof_info['Zip'])
+            al.add_value('prefecture', prof['State'])
+            al.add_value('street', prof_info['Address'])
+            al.add_value('city', prof['City'])
+
+            address = al.load_item()
+            l.add_value('address', dict(address))
+
+            coordinates, country_code = self.geolocate(prof_info['Location'],
+                                                       default_code=self.settings.get('GEO_BIAS'))
+            self.logger.debug(f"Coordinates: {coordinates}")
+            l.add_value('coordinates', coordinates)
+
+            if country_code is not None:
+                l.add_value('phone_number', format_phone(prof_info['Phone'], country_code))
+            else:
+                l.add_value('phone_number', prof_info['Phone'])
+
+            l.add_value('company_name', prof['UserDisplayName'])
+
+            l.add_value('service_cost', '' if 'CostEstimateDescription' not in prof_info else prof_info['CostEstimateDescription'])
+            l.add_value('pro_rating', prof_info['ReviewRating'])
+            l.add_value('reviews_count', prof_info['ReviewCount'])
+
+            yield l.load_item()
+        self.last_item += self.number_of_items
