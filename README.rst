@@ -17,3 +17,10 @@ Spider has name ``profiles``. So, run the spider with the next command
 .. code::
 
     scrapy crawl profiles --loglevel INFO
+
+
+Spider that works with API has name ``api``. So, run it by
+
+.. code::
+
+    scrapy crawl api --loglevel INFO
