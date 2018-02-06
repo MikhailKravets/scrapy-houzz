@@ -152,7 +152,7 @@ class APISpider(scrapy.Spider, GeoLocator):
         'Connection': 'Keep-Alive'
     }
 
-    def __init__(self, stats: MemoryStatsCollector, name=None, **kwargs):
+    def __init__(self, stats: MemoryStatsCollector, name=None, queue=None, **kwargs):
         super().__init__(name=name, **kwargs)
         GeoLocator.__init__(self)
         self.extracted = 0
@@ -161,6 +161,7 @@ class APISpider(scrapy.Spider, GeoLocator):
         self.last_item = 0
 
     def start_requests(self):
+        self.last_item = self.settings.get('START_FROM')
         while self.last_item < self.settings.get('MAX_COUNT'):
             body = {
                 'version': 174,
