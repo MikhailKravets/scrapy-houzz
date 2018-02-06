@@ -143,7 +143,7 @@ class APISpider(scrapy.Spider, GeoLocator):
     url = 'https://api.houzz.com/api?'
 
     headers = {
-        'X-HOUZZ-API-SITE-ID': 106,
+        'X-HOUZZ-API-SITE-ID': 106,  # ID of site ot extract data from
         'X-HOUZZ-API-LOCALE': 'en_EN',
         'X-HOUZZ-API-APP-AGENT': 'Lenovo S660~4.4.2',
         'X-HOUZZ-API-APP-NAME': 'android1',
@@ -159,20 +159,20 @@ class APISpider(scrapy.Spider, GeoLocator):
         self.stats = stats
         self.geo_coder = None  # realized lazy connection to geo coder
         self.last_item = 0
-        self.number_of_items = 10
 
     def start_requests(self):
-        body = {
-            'version': 174,
-            'method': 'getProfessionals',
-            'format': 'json',
-            'dateFormat': 'sec',
-            'start': self.last_item,
-            'numberOfItems': self.number_of_items,
-            'includeSponsored': 'yes'
-        }
-        url = self.url + urlencode(body)
-        yield scrapy.Request(url=url, callback=self.parse, meta={'proxy': PROXY_ADDR}, headers=self.headers)
+        while self.last_item < self.settings.get('MAX_COUNT'):
+            body = {
+                'version': 174,
+                'method': 'getProfessionals',
+                'format': 'json',
+                'dateFormat': 'sec',
+                'start': self.last_item,
+                'numberOfItems': self.settings.get('ITEMS_ON_PAGE'),
+                'includeSponsored': 'yes'
+            }
+            url = self.url + urlencode(body)
+            yield scrapy.Request(url=url, callback=self.parse, meta={'proxy': PROXY_ADDR}, headers=self.headers)
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -183,28 +183,31 @@ class APISpider(scrapy.Spider, GeoLocator):
     def parse(self, response: scrapy.http.TextResponse):
         data = json.loads(response.body_as_unicode())
         if data['Ack'] != 'Success':
-            return  # something wrong should exit
+            return  # something wrong happened, should exit
+
+        if not self.stats.get_value('profiles_total', None):
+            self.stats.set_value('profiles_total', int(data['TotalProfessionalCount']))
+
         for prof in data['Professionals']:
             prof_info = prof['Professional']
 
             l = ProfileLoader(item=Profile(), response=response)
             l.add_value('contact_name', prof['UserName'])
-            l.add_value('activity_area', prof_info['ServicesProvided'])
-            l.add_value('website', prof_info['WebSite'])
-            l.add_value('email', prof['Email'])
+            l.add_value('activity_area', self.get_item('ServicesProvided', prof_info))
+            l.add_value('website', self.get_item('WebSite', prof_info))
+            l.add_value('email', self.get_item('Email', prof_info))
 
             al = ItemLoader(item=Address(), response=response)
-            al.add_value('postal', prof_info['Zip'])
-            al.add_value('prefecture', prof['State'])
-            al.add_value('street', prof_info['Address'])
-            al.add_value('city', prof['City'])
+            al.add_value('postal', self.get_item('Zip', prof_info))
+            al.add_value('prefecture', self.get_item('State', prof_info))
+            al.add_value('street', self.get_item('Address', prof_info))
+            al.add_value('city', self.get_item('City', prof_info))
 
             address = al.load_item()
             l.add_value('address', dict(address))
 
             coordinates, country_code = self.geolocate(prof_info['Location'],
                                                        default_code=self.settings.get('GEO_BIAS'))
-            self.logger.debug(f"Coordinates: {coordinates}")
             l.add_value('coordinates', coordinates)
 
             if country_code is not None:
@@ -212,11 +215,20 @@ class APISpider(scrapy.Spider, GeoLocator):
             else:
                 l.add_value('phone_number', prof_info['Phone'])
 
-            l.add_value('company_name', prof['UserDisplayName'])
+            l.add_value('company_name', self.get_item('UserDisplayName', prof_info))
 
-            l.add_value('service_cost', '' if 'CostEstimateDescription' not in prof_info else prof_info['CostEstimateDescription'])
-            l.add_value('pro_rating', prof_info['ReviewRating'])
-            l.add_value('reviews_count', prof_info['ReviewCount'])
+            l.add_value('service_cost', self.get_item('CostEstimateDescription', prof_info))
+            l.add_value('pro_rating', self.get_item('ReviewRating', prof_info))
+            l.add_value('reviews_count', self.get_item('ReviewCount', prof_info))
 
             yield l.load_item()
-        self.last_item += self.number_of_items
+        self.last_item += self.settings.get('ITEMS_ON_PAGE')
+
+    def get_item(self, key, dict_):
+        """
+        Return None if key isn't found in dict_
+        """
+        try:
+            return dict_[key]
+        except KeyError:
+            return None

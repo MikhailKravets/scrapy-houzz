@@ -19,7 +19,10 @@ MONGO_URI = 'mongodb://localhost:27017/'
 MONGO_DB = 'houzz'
 
 # Amount of profiles to extract
-MAX_COUNT = 5000
+MAX_COUNT = 60
+
+# Profiles per page
+ITEMS_ON_PAGE = 40
 
 # Identify the preferable country when searching the location by postal
 GEO_BIAS = None
