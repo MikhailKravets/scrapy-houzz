@@ -9,6 +9,7 @@ import scrapy
 from urllib.parse import urlencode
 from geopy import Nominatim
 from geopy.exc import GeocoderTimedOut
+from phonenumbers import NumberParseException
 from scrapy.loader import ItemLoader
 from scrapy.statscollectors import MemoryStatsCollector
 
@@ -36,7 +37,9 @@ class GeoLocator:
             self.geo_coder = Nominatim(country_bias=default_code)
         try:
             geo = self.geo_coder.geocode(query, addressdetails=True, timeout=self.timeout)
-        except GeocoderTimedOut as error:
+        except GeocoderTimedOut:
+            return None, default_code
+        except Exception:
             return None, default_code
         if not geo:
             return None, default_code
@@ -159,6 +162,7 @@ class APISpider(scrapy.Spider, GeoLocator):
         self.stats = stats
         self.geo_coder = None  # realized lazy connection to geo coder
         self.last_item = 0
+        self.queue = queue
 
     def start_requests(self):
         self.last_item = self.settings.get('START_FROM')
@@ -212,7 +216,10 @@ class APISpider(scrapy.Spider, GeoLocator):
             l.add_value('coordinates', coordinates)
 
             if country_code is not None:
-                l.add_value('phone_number', format_phone(prof_info['Phone'], country_code))
+                try:
+                    l.add_value('phone_number', format_phone(prof_info['Phone'], country_code))
+                except NumberParseException:
+                    l.add_value('phone_number', prof_info['Phone'])
             else:
                 l.add_value('phone_number', prof_info['Phone'])
 

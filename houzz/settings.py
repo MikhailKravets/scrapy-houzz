@@ -11,6 +11,8 @@
 
 BOT_NAME = 'houzz'
 
+LOG_LEVEL = 'INFO'
+
 SPIDER_MODULES = ['houzz.spiders']
 NEWSPIDER_MODULE = 'houzz.spiders'
 
@@ -22,7 +24,7 @@ MONGO_DB = 'houzz'
 MAX_COUNT = 80
 
 # Profiles per page
-ITEMS_ON_PAGE = 10
+ITEMS_ON_PAGE = 40
 
 # From which profile to start
 START_FROM = 0

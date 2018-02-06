@@ -41,7 +41,8 @@ class HouzzPipeline(object):
     def close_spider(self, spider: ProfilesSpider):
         stats = spider.stats
         finish_time = datetime.datetime.utcnow()
-        self.logs_collection.insert_one({
+
+        log = {
             'start_datetime': stats.get_value('start_time'),
             'finish_datetime': finish_time,
             'total_spent_time': (finish_time - stats.get_value('start_time')).total_seconds(),
@@ -49,12 +50,17 @@ class HouzzPipeline(object):
             'profiles_total': stats.get_value('profiles_total'),
             'error_count': 0 if stats.get_value('log_count/ERROR') is None else stats.get_value('log_count/ERROR'),
             'retries_count': stats.get_value('retry_times', 0),
-        })
+        }
+        self.logs_collection.insert_one(log)
+
+        if hasattr(spider, 'queue'):
+            if spider.queue is not None:
+                spider.queue.put(log)
+
         self.client.close()
 
     def process_item(self, item, spider: ProfilesSpider):
-        self.profile_collection.update({'contact_name': item['contact_name'],
-                                        'phone_number': item['phone_number']}, dict(item), True)
+        self.profile_collection.update({'contact_name': item['contact_name']}, dict(item), True)
         spider.stats.set_value('profiles_added', spider.stats.get_value('profiles_added', 0) + 1)
         spider.logger.info(f'Profile item "{item["contact_name"]}" processed')
         return item

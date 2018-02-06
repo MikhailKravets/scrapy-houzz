@@ -9,6 +9,7 @@ def crawl(params, queue):
     process = CrawlerProcess(params)
     process.crawl(APISpider, queue=queue)
     process.start()
+    process.stop()
 
 
 params = {}
@@ -28,3 +29,15 @@ with multiprocessing.Pool(5) as pool:
         d['MAX_COUNT'] = i + step
         args.append((d, q))
     pool.starmap(crawl, args)
+
+begin_extracted = False
+processed = 0
+while not q.empty():
+    val = q.get()
+    if not begin_extracted:
+        begin_time = val['start_datetime']
+        begin_extracted = True
+    end_time = val['finish_datetime']
+    processed += val['profiles_added']
+
+print(f"Time per profile: {(end_time - begin_time).total_seconds() / processed}")
