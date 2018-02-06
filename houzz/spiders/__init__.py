@@ -2,8 +2,11 @@
 #
 # Please refer to the documentation for information on how to create and manage
 # your spiders.
+import json
+
 import phonenumbers
 import scrapy
+from urllib.parse import urlencode
 from geopy import Nominatim
 from geopy.exc import GeocoderTimedOut
 from scrapy.loader import ItemLoader
@@ -138,3 +141,50 @@ class ProfilesSpider(scrapy.Spider):
         """
         locale = phonenumbers.parse(phone, country_code.upper())
         return phonenumbers.format_number(locale, phonenumbers.PhoneNumberFormat.E164)
+
+
+class APISpider(scrapy.Spider):
+    name = 'api'
+    url = 'https://api.houzz.com/api?'
+
+    headers = {
+        'X-HOUZZ-API-SITE-ID': 106,
+        'X-HOUZZ-API-LOCALE': 'en_EN',
+        # 'X-HOUZZ-API-VISITOR-TOKEN': '',
+        'X-HOUZZ-API-APP-AGENT': 'Lenovo S660~4.4.2',
+        'X-HOUZZ-API-APP-NAME': 'android1',
+        'User-Agent': 'Dalvik/1.6.0 (Linux; U; Android 4.4.2; Lenovo S660 Build/KOT49H)',
+        'Host': 'api.houzz.com',
+        'Connection': 'Keep-Alive'
+    }
+
+    def __init__(self, stats: MemoryStatsCollector, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.extracted = 0
+        self.stats = stats
+        self.geo_coder = None  # realized lazy connection to geo coder
+        self.last_prof = 0
+        self.number_of_items = 1
+
+    def start_requests(self):
+        body = {
+            'version': 174,
+            'method': 'getProfessionals',
+            'format': 'json',
+            'dateFormat': 'sec',
+            'start': 0,
+            'numberOfItems': 40,
+            'includeSponsored': 'yes'
+        }
+        url = self.url + urlencode(body)
+        yield scrapy.Request(url=url, callback=self.parse, meta={'proxy': PROXY_ADDR}, headers=self.headers)
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        spider = cls(crawler.stats, *args, **kwargs)
+        spider._set_crawler(crawler)
+        return spider
+
+    def parse(self, response: scrapy.http.TextResponse):
+        data = json.loads(response.body)
+        print(data)

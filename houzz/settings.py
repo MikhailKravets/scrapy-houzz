@@ -25,7 +25,7 @@ MAX_COUNT = 5000
 GEO_BIAS = 'JP'
 
 # Proxy address set to some value, i.e. 'http://username:password@some_proxy_server:ports'
-PROXY_ADDR = '122.183.139.109:8080'  # That is an Indian proxy
+PROXY_ADDR = None  # That is an Indian proxy '122.183.139.109:8080'
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = 'houzz (+http://www.yourdomain.com)'
