@@ -9,6 +9,7 @@ Settings explanation
 - ``MONGO_URI`` - address of MongoDB (default 'mongodb://localhost:27017/');
 - ``MONGO_DB`` - MongoDB database name (default 'houzz');
 - ``MAX_COUNT`` - amount of profiles to extract;
+- ``ITEMS_ON_PAGE`` - how much profiles to upload per one request;
 - ``GEO_BIAS`` - in which country search coordinates first (default Japan);
 - ``PROXY_ADDR`` - address of proxy
 
