@@ -10,7 +10,7 @@ import scrapy.crawler
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-from houzz.spiders import ProfilesSpider
+from houzz.spiders import ProfilesSpider, APISpider
 
 
 class HouzzPipeline(object):
@@ -38,24 +38,37 @@ class HouzzPipeline(object):
         self.profile_collection: Collection = self.db[self.profile_collection_name]
         self.logs_collection: Collection = self.db[self.logs_collection_name]
 
-    def close_spider(self, spider: ProfilesSpider):
+    def close_spider(self, spider: APISpider):
         stats = spider.stats
         finish_time = datetime.datetime.utcnow()
 
-        log = {
-            'start_datetime': stats.get_value('start_time'),
-            'finish_datetime': finish_time,
-            'total_spent_time': (finish_time - stats.get_value('start_time')).total_seconds(),
-            'profiles_added': stats.get_value('profiles_added'),
-            'profiles_total': stats.get_value('profiles_total'),
-            'error_count': 0 if stats.get_value('log_count/ERROR') is None else stats.get_value('log_count/ERROR'),
-            'retries_count': stats.get_value('retry_times', 0),
-        }
-        self.logs_collection.insert_one(log)
-
-        if hasattr(spider, 'queue'):
-            if spider.queue is not None:
-                spider.queue.put(log)
+        mongo_log = self.logs_collection.find_one({'process_hash': spider.process_hash})
+        spider.logger.debug(f"MONGO LOG: {mongo_log}")
+        if mongo_log is None:
+            log = {
+                'process_hash': spider.process_hash,
+                'start_datetime': stats.get_value('start_time'),
+                'finish_datetime': finish_time,
+                'total_spent_time': (finish_time - stats.get_value('start_time')).total_seconds(),
+                'profiles_added': stats.get_value('profiles_added'),
+                'profiles_total': stats.get_value('profiles_total'),
+                'error_count': 0 if stats.get_value('log_count/ERROR') is None else stats.get_value('log_count/ERROR'),
+                'retries_count': stats.get_value('retry_times', 0),
+            }
+            self.logs_collection.insert_one(log)
+        else:
+            if stats.get_value('log_count/ERROR') is None:
+                err_count = 0
+            else:
+                err_count = stats.get_value('log_count/ERROR')
+            log = {
+                'finish_datetime': finish_time,
+                'total_spent_time': (finish_time - stats.get_value('start_time')).total_seconds(),
+                'profiles_added': mongo_log['profiles_added'] + stats.get_value('profiles_added'),
+                'error_count': mongo_log['error_count'] + err_count,
+                'retries_count': mongo_log['error_count'] + stats.get_value('retry_times', 0),
+            }
+            self.logs_collection.update_one({'process_hash': spider.process_hash}, {'$set': log})
 
         self.client.close()
 
