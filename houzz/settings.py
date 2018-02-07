@@ -21,10 +21,10 @@ MONGO_URI = 'mongodb://localhost:27017/'
 MONGO_DB = 'houzz'
 
 # Amount of profiles to extract
-MAX_COUNT = 80
+MAX_COUNT = 5000
 
 # Profiles per page
-ITEMS_ON_PAGE = 40
+ITEMS_ON_PAGE = 20
 
 # From which profile to start
 START_FROM = 0

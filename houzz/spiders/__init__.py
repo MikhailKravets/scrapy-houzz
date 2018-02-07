@@ -155,18 +155,24 @@ class APISpider(scrapy.Spider, GeoLocator):
         'Connection': 'Keep-Alive'
     }
 
-    def __init__(self, stats: MemoryStatsCollector, name=None, queue=None, **kwargs):
+    def __init__(self, stats: MemoryStatsCollector, name=None, process_hash=None, start_from=None, max_count=None, **kwargs):
         super().__init__(name=name, **kwargs)
         GeoLocator.__init__(self)
         self.extracted = 0
         self.stats = stats
         self.geo_coder = None  # realized lazy connection to geo coder
-        self.last_item = 0
-        self.queue = queue
+
+        self.last_item = int(start_from) if start_from is not None else start_from
+        self.process_hash = process_hash
+        self.max_count = int(max_count) if max_count is not None else max_count
 
     def start_requests(self):
-        self.last_item = self.settings.get('START_FROM')
-        while self.last_item < self.settings.get('MAX_COUNT'):
+        if self.last_item is None:
+            self.last_item = self.settings.get('START_FROM')
+        if self.max_count is None:
+            self.max_count = self.settings.get('MAX_COUNT')
+
+        while self.last_item < self.max_count:
             body = {
                 'version': 174,
                 'method': 'getProfessionals',
@@ -186,6 +192,8 @@ class APISpider(scrapy.Spider, GeoLocator):
         return spider
 
     def parse(self, response: scrapy.http.TextResponse):
+        if self.last_item >= self.max_count:
+            return  # we exceed max amount of profiles, should exit
         data = json.loads(response.body_as_unicode())
         if data['Ack'] != 'Success':
             return  # something wrong happened, should exit
@@ -230,7 +238,7 @@ class APISpider(scrapy.Spider, GeoLocator):
             l.add_value('reviews_count', self.get_item('ReviewCount', prof_info))
 
             yield l.load_item()
-        self.last_item += self.settings.get('ITEMS_ON_PAGE')
+        self.last_item += self.settings.get('ITEMS_ON_PAGE') + 1
 
     def get_item(self, key, dict_):
         """
